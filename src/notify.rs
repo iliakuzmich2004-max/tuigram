@@ -34,6 +34,9 @@ pub enum Notifications {
     /// A title and text, shown only while the window is in the background:
     /// kitty, foot, Konsole.
     Osc99,
+    /// A desktop notification over D-Bus (`org.freedesktop.Notifications`),
+    /// shown by the desktop whatever the terminal is.
+    Dbus,
 }
 
 impl Notifications {
@@ -92,7 +95,8 @@ pub fn escape(method: Notifications, alert: &Alert, id: u64, tmux: bool) -> Opti
     let title = text::flat(&alert.title).replace(';', ",");
     let body = text::flat(&alert.body).replace(';', ",");
     let code = match method {
-        Notifications::Auto | Notifications::Off => return None,
+        // `Dbus` goes over D-Bus instead (`desktop`), no code is sent.
+        Notifications::Auto | Notifications::Off | Notifications::Dbus => return None,
         Notifications::Bell if alert.silent => return None,
         // tmux rings the terminal's bell itself.
         Notifications::Bell => return Some("\x07".into()),
@@ -123,6 +127,23 @@ pub fn title(unread_chats: i32) -> String {
     } else {
         "\x1b]2;tuigram\x07".into()
     }
+}
+
+/// Shows `alert` as a desktop notification, over D-Bus
+/// (`org.freedesktop.Notifications`). The desktop shows it whatever
+/// terminal tuigram runs in, so it works when no one is watching the
+/// window, e.g. in a detached tmux session. `false` when it couldn't be
+/// sent, e.g. no notification server is listening.
+pub fn desktop(alert: &Alert) -> bool {
+    let mut notification = notify_rust::Notification::new();
+    notification
+        .appname("tuigram")
+        .summary(&alert.title)
+        .body(&alert.body);
+    if alert.silent {
+        notification.hint(notify_rust::Hint::SuppressSound(true));
+    }
+    notification.show().is_ok()
 }
 
 /// Writes a code to the terminal, between frames.
@@ -319,6 +340,16 @@ mod tests {
         );
         assert_eq!(escape(Notifications::Bell, &hi, 1, false).unwrap(), "\x07");
         assert_eq!(escape(Notifications::Off, &hi, 1, false), None);
+    }
+
+    #[test]
+    fn dbus_is_set_by_name_and_sends_no_escape_code() {
+        assert_eq!(
+            serde_json::from_str::<Notifications>("\"dbus\"").unwrap(),
+            Notifications::Dbus
+        );
+        let hi = alert("Alice", "see you at 5");
+        assert_eq!(escape(Notifications::Dbus, &hi, 1, false), None);
     }
 
     #[test]

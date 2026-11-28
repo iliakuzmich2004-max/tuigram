@@ -50,6 +50,7 @@ use crate::term::Terminal;
 use crate::text;
 use crate::tg::{Deletable, EditText, Found, Invite, Mentions, Missed, Page, Tagged, Tg, TgEvent};
 use crate::theme::{Colors, Corners, Themes};
+use crate::tmux;
 use crate::topics::{self, Forum};
 use crate::ui;
 use crate::video::{Inline, VideoEvent, VideoView};
@@ -3933,6 +3934,18 @@ impl App {
         }
         self.notifications_sent += 1;
         let id = self.notifications_sent;
+        // The desktop is told instead of the terminal when notifications
+        // are set to go there, or when no one can see the terminal's:
+        // inside tmux whose session has no client attached, escape codes
+        // would reach no window.
+        if self.notify_with == Notifications::Dbus
+            || (self.notify_with != Notifications::Off
+                && self.in_tmux
+                && !tmux::any_client_attached())
+        {
+            notify::desktop(&alert);
+            return;
+        }
         if let Some(code) = notify::escape(self.notify_with, &alert, id, self.in_tmux) {
             notify::send(&code);
         }

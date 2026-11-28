@@ -32,7 +32,7 @@ pub struct Settings {
     /// Chats highlighted with `H`, by id.
     pub highlighted_chats: Vec<i64>,
     /// How new messages are announced: "auto" picks what the terminal
-    /// supports; also "off", "bell", "osc9", "osc777" or "osc99".
+    /// supports; also "off", "bell", "osc9", "osc777", "osc99" or "dbus".
     pub notifications: Notifications,
     /// The sound tuigram plays for them, by name: a built-in one, or a file
     /// in the sounds folder without its extension. None if not set.

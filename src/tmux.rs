@@ -69,6 +69,35 @@ fn restore_args(pane: &str, value: Option<&str>) -> Vec<String> {
     args
 }
 
+/// Whether the tmux session tuigram runs in has a client attached: with
+/// none, no terminal window shows the session, so escape codes would reach
+/// no one. Anything odd (tmux gone, the call failed, odd output) counts as
+/// attached, and notifications keep going to the terminal as before.
+pub fn any_client_attached() -> bool {
+    let Ok(out) = Command::new("tmux")
+        .args(["display-message", "-p", "#{session_attached}"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return true;
+    };
+    if !out.status.success() {
+        return true;
+    }
+    attached(&out.stdout)
+}
+
+/// `#{session_attached}` is tmux's count of clients on the session: the
+/// session is watched when it's over zero. Output that doesn't parse
+/// counts as watched.
+fn attached(output: &[u8]) -> bool {
+    match String::from_utf8_lossy(output).trim().parse::<u32>() {
+        Ok(clients) => clients > 0,
+        Err(_) => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -100,6 +129,15 @@ mod tests {
             None,
             "the image library leaves this one alone"
         );
+    }
+
+    #[test]
+    fn the_session_is_watched_when_tmux_counts_a_client() {
+        assert!(attached(b"1\n"));
+        assert!(attached(b"2\n"));
+        assert!(!attached(b"0\n"));
+        assert!(attached(b""), "tmux said nothing: assume someone watches");
+        assert!(attached(b"junk"), "odd output: assume someone watches");
     }
 
     #[test]
